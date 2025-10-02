@@ -1,0 +1,222 @@
+import java.io.*;
+import java.util.*;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+
+
+public class Main {
+
+    public static void main(String[] args){
+        SwingUtilities.invokeLater(Main::createAndShowGUI);
+    }
+
+    private static void createAndShowGUI() {
+        JFrame frame = new JFrame("Bioinformatics Lab 1 - FASTA Tools");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        JTextArea outputArea = new JTextArea(24, 80);
+        outputArea.setEditable(false);
+        outputArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        JScrollPane scrollPane = new JScrollPane(outputArea);
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton openBtn = new JButton("Open FASTA...");
+        JButton simulateBtn = new JButton("Simulate FASTA");
+        JButton processBtn = new JButton("Process Algorithms");
+        buttonPanel.add(openBtn);
+        buttonPanel.add(simulateBtn);
+        buttonPanel.add(processBtn);
+
+        frame.getContentPane().setLayout(new BorderLayout());
+        frame.getContentPane().add(buttonPanel, BorderLayout.NORTH);
+        frame.getContentPane().add(scrollPane, BorderLayout.CENTER);
+
+        final String[] currentHeader = new String[]{""};
+        final String[] currentSequence = new String[]{""};
+
+        openBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle("Choose FASTA file");
+            chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+                    "FASTA Files", "fasta", "fa", "fna", "faa"));
+            int res = chooser.showOpenDialog(frame);
+            if (res == JFileChooser.APPROVE_OPTION) {
+                File f = chooser.getSelectedFile();
+                try {
+                    Map.Entry<String, String> parsed = parseFasta(f);
+                    currentHeader[0] = parsed.getKey();
+                    currentSequence[0] = parsed.getValue();
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("Loaded FASTA from: ").append(f.getName()).append('\n');
+                    sb.append("Header: ").append(currentHeader[0]).append('\n');
+                    sb.append("Length: ").append(currentSequence[0].length()).append("\n\n");
+                    sb.append("Sequence (wrapped 30):\n");
+                    sb.append(wrapEveryN(currentSequence[0], 30)).append('\n');
+                    outputArea.setText(sb.toString());
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(frame, "Failed to read FASTA: " + ex.getMessage(),
+                            "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        simulateBtn.addActionListener(e -> {
+            String[] types = new String[]{"DNA", "RNA", "Protein"};
+            String type = (String) JOptionPane.showInputDialog(
+                    frame,
+                    "Choose sequence type",
+                    "Simulate FASTA",
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    types,
+                    types[0]
+            );
+            if (type == null) return;
+            String lengthStr = JOptionPane.showInputDialog(frame, "Sequence length", "120");
+            if (lengthStr == null) return;
+            int length = 120;
+            try {
+                length = Math.max(1, Integer.parseInt(lengthStr.trim()));
+            } catch (NumberFormatException ignored) {}
+
+            Map.Entry<String, String> fasta = simulateFasta(type, length);
+            currentHeader[0] = fasta.getKey();
+            currentSequence[0] = fasta.getValue();
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("> ").append(currentHeader[0]).append('\n');
+            sb.append(wrapEveryN(currentSequence[0], 30)).append("\n\n");
+            sb.append(renderAlgorithms(currentSequence[0]));
+            outputArea.setText(sb.toString());
+        });
+
+        processBtn.addActionListener(e -> {
+            if (currentSequence[0].isEmpty()) {
+                JOptionPane.showMessageDialog(frame, "No sequence loaded. Open or simulate a FASTA first.",
+                        "Info", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            outputArea.append("\n\n" + renderAlgorithms(currentSequence[0]));
+        });
+
+        frame.pack();
+        frame.setLocationRelativeTo(null);
+        frame.setVisible(true);
+    }
+
+    public static String uniqueLettersInOrder(String s) {
+        if (s == null || s.isEmpty()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder();
+        char previous = s.charAt(0);
+        out.append(previous);
+        for (int i = 1; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c != previous) {
+                out.append(c);
+                previous = c;
+            }
+        }
+        return out.toString();
+    }
+
+ 
+    public static void relativefq(String s) {
+        if (s == null || s.isEmpty()) {
+            return;
+        }
+        Map<Character, Integer> counts = new LinkedHashMap<>();
+        for (char c : s.toCharArray()) {
+            counts.put(c, counts.getOrDefault(c, 0) + 1);
+        }
+        int n = s.length();
+        for (Map.Entry<Character, Integer> e : counts.entrySet()) {
+            char symbol = e.getKey();
+            int count = e.getValue();
+            int percent = (int)Math.round((count * 100.0) / n);
+            System.out.println(symbol + " " + percent);
+        }
+    }
+
+    private static String buildRelativeFrequenciesString(String s) {
+        if (s == null || s.isEmpty()) {
+            return "";
+        }
+        Map<Character, Integer> counts = new LinkedHashMap<>();
+        for (char c : s.toCharArray()) {
+            counts.put(c, counts.getOrDefault(c, 0) + 1);
+        }
+        int n = s.length();
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<Character, Integer> e : counts.entrySet()) {
+            char symbol = e.getKey();
+            int count = e.getValue();
+            int percent = (int)Math.round((count * 100.0) / n);
+            sb.append(symbol).append(' ').append(percent).append('\n');
+        }
+        return sb.toString();
+    }
+
+    private static String renderAlgorithms(String seq) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Algorithms on sequence (length ").append(seq.length()).append("):\n");
+        sb.append("- Unique letters in order (collapse consecutive):\n");
+        sb.append(uniqueLettersInOrder(seq)).append("\n\n");
+        sb.append("- Relative frequencies (%):\n");
+        sb.append(buildRelativeFrequenciesString(seq));
+        return sb.toString();
+    }
+
+    private static Map.Entry<String, String> parseFasta(File file) throws IOException {
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String headerLine = br.readLine();
+            if (headerLine == null) throw new IOException("Empty file");
+            if (headerLine.startsWith(">")) headerLine = headerLine.substring(1);
+            StringBuilder seq = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) {
+                for (int i = 0; i < line.length(); i++) {
+                    char c = line.charAt(i);
+                    if (!Character.isWhitespace(c)) {
+                        seq.append(c);
+                    }
+                }
+            }
+            return new AbstractMap.SimpleEntry<>(headerLine, seq.toString());
+        }
+    }
+
+    private static Map.Entry<String, String> simulateFasta(String type, int length) {
+        String alphabet;
+        switch (type) {
+            case "RNA":
+                alphabet = "ACGU";
+                break;
+            case "Protein":
+                alphabet = "ACDEFGHIKLMNPQRSTVWY"; // 20 standard amino acids
+                break;
+            default:
+                alphabet = "ACGT"; // DNA
+        }
+        Random rng = new Random();
+        StringBuilder seq = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            seq.append(alphabet.charAt(rng.nextInt(alphabet.length())));
+        }
+        String header = "simulated|type=" + type + "|len=" + length;
+        return new AbstractMap.SimpleEntry<>(header, seq.toString());
+    }
+
+    private static String wrapEveryN(String s, int n) {
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < s.length(); i += n) {
+            int end = Math.min(i + n, s.length());
+            out.append(s, i, end).append('\n');
+        }
+        return out.toString();
+    }
+
+ 
+}
